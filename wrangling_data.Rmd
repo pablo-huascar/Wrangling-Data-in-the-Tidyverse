@@ -1,0 +1,162 @@
+---
+title: "Wrangling Data in the Tidyverse Course Project"
+author: 
+- "Francisco Pablo Huascar Aragão Pinheiro"
+- "Tidyverse Skills for Data Science in R"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    keep_md: yes
+editor_options:
+  chunk_output_type: console
+---
+This assignment is part of the "Wrangling Data in the Tidyverse" course from Coursera.
+
+This assignment uses data from Consumer Financial Protection Bureau (CFPB) in the United States (US). In this project, you will practice data exploration and data wrangling with the tidyverse R packages using this data. 
+
+The CFPB is an independent agency of the United States government that promotes transparency and protects consumers by providing information needed to make decisions when choosing financial institutions including banking institutions, lenders, mortgage services, credit unions, securities firms, foreclosure services, and debt collectors. One of the purposes of the agency is to receive and process complaints and questions about consumer financial products and services.
+
+In this assignment, we will be using the Consumer Complaint Database. You can quickly view, sort and filter the data in your browser. In particular, we will be using data from October 15, 2017 to October 15, 2020.
+
+# Loading packages
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(tidytext)
+```
+
+# Getting the data
+
+```{r message=FALSE, warning=FALSE}
+url <- 
+  "https://d3c33hcgiwev3.cloudfront.net/Rj3GCXMzSNW9xglzM1jVpg_f5aa2a757a614dfabb12d4b73705cd65_data_complaints.csv?Expires=1678147200&Signature=USj774E41uC27xeXkIXRIRRUDTQ89f1iGnxf0MbsMTR9vjEHwtx7ZiWP34fXSL1ZdH7LjPOe~yfVBMdC5JJg3CIlXldAO1-gtD0ARxAUKt00I61WMiZuDLDtuAtJjyXwmxdxZO2awmNbKs7OwS064UvTUDKtcRbW~d4tysEBDtY_&Key-Pair-Id=APKAJLTNE6QMUY6HBC5A"
+
+complaints <- 
+  read_csv(file = url) %>% 
+  clean_names()
+```
+
+# Data Wrangling
+
+```{r}
+complaints <- 
+  complaints %>% 
+  mutate(across(c(date_received,
+                  date_sent_to_company),~ mdy(.x))) %>%
+  mutate(across(c(product,
+                  state),as_factor))
+```
+
+# Question 1
+
+Consider the column titled `Date received` and filter rows for all Student loan complaints received after January 1, 2018. Count the number of student loan complaints received by each US state and rank in a decreasing order with the state with the most complaints at the top and the states with the least complaints at the bottom.
+
+How many student loan complaints did the US state with second most complaints have?
+
+*Answer:* 1374
+
+```{r}
+complaints %>%
+  select(date_received,
+         product,
+         state) %>% 
+  filter(date_received > ymd("2018-01-01"),
+         product == "Student loan") %>% 
+  group_by(state) %>%
+  count(product) %>% 
+  arrange(desc(n))
+```
+
+# Question 2
+
+Complaints can be submitted in different ways to the CFPB. For example, someone can submit a complaint on the web, but they can also submit a complaint by phone.
+
+Consider all complaints that were submitted by email.
+
+For this subset of complaints, what is the average amount of time between the complaint being received by CFPB (`Date received`) and the CFPB sending the complaint to the company (`Date sent to company`) ?
+
+Round to the nearest tenths digit.
+
+*Answer:* 1.6 days
+
+```{r}
+complaints %>% 
+  filter(submitted_via == "Email") %>%
+  mutate(time_spam = date_sent_to_company - date_received) %>% 
+  summarise(average_time = mean(time_spam) %>% 
+              round(1))
+```
+
+# Question 3
+
+Consider all Mortgage complaints.  
+
+How many times does the string "student" appear in the string of text in the `Consumer complaint narrative` column?
+
+*Answer:* 250
+
+```{r}
+complaints %>% 
+  filter(product == "Mortgage") %>%
+  mutate(count = str_count(consumer_complaint_narrative,
+                           "student")) %>%
+  drop_na(count) %>% 
+  summarise(total = sum(count))
+```
+
+# Question 4
+
+Consider only Student loan complaints.
+
+The `Issue` column contains a set of plain text categorical variables that the consumer identified in the complaint. For example, one type of issue is "Trouble during payment process" for Mortgage complaints.
+
+For each `Issue`, calculate what is the average length of characters in the string text in the `Consumer complaint narrative` column.
+
+Which `Issue` has the longest complaint length on average?
+
+*Answer:* Dealing with your lender or servicer
+
+```{r}
+complaints %>% 
+  filter(product == "Student loan") %>% 
+  mutate(lenght = str_length(consumer_complaint_narrative)) %>%
+  drop_na(lenght) %>% 
+  group_by(issue) %>% 
+  summarise(average_length = mean(lenght)) %>% 
+  arrange(desc(average_length))
+```
+
+# Question 5
+
+Consider only Credit card or prepaid card complaints. Consider the two columns `Product` and `Consumer complaint narrative`.
+
+For the string text in the `Consumer complaint narrative` column, drop any rows with `NA` in the column and remove any strings such as "XX", "XXX", "XXXX" in the complaint.
+
+Transform this data frame with two columns into a data frame with three columns (`Product`, `id_number`, and `word`)  where the text in the `Consumer complaint narrative` column gets converted into a format where each row corresponds to one word of the complaint (`word`) while also keeping track of which complaint we are working with (`id_number)`. 
+
+Remove any stop words.   
+
+What are the top three most frequently used words for this type of complaint?
+
+*Answer:* credit, card, and account
+
+```{r}
+complaints %>% 
+  filter(product == "Credit card or prepaid card") %>% 
+  select(product, consumer_complaint_narrative) %>% 
+  drop_na(consumer_complaint_narrative) %>% 
+  filter(!str_detect(consumer_complaint_narrative, "XX") &
+           !str_detect(consumer_complaint_narrative, "XXX") &
+           !str_detect(consumer_complaint_narrative, "XXXX")) %>% 
+  mutate(id_number = 1:length(product)) %>% 
+  unnest_tokens(word,
+                consumer_complaint_narrative) %>%
+  anti_join(stop_words) %>% 
+  count(word, sort = T)
+```
+
+
+
